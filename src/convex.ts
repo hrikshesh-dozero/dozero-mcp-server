@@ -2,39 +2,31 @@
  * Convex HTTP client for the DoZero MCP server.
  *
  * All calls go through /api/mcp/* routes on the DoZero Convex backend.
- * These routes validate the API key (X-Api-Key header), resolve the
- * owning user, and forward to the appropriate internal mutation/query.
- *
- * This means the MCP server never needs a browser JWT — just a
- * long-lived API key the user generates in DoZero Settings.
+ * Authentication uses the WorkOS Bearer token obtained via OAuth 2.0.
+ * The token is injected per-session by the SSE handler in index.ts.
  */
 
 import type { ConvexMutationResponse } from "./types.js";
 
 function getConfig() {
   const convexUrl = process.env.DOZERO_CONVEX_URL;
-  const apiKey = process.env.DOZERO_API_KEY;
 
   if (!convexUrl) {
     throw new Error(
       "DOZERO_CONVEX_URL is not set. Set it to your Convex deployment URL (e.g. https://happy-animal-123.convex.cloud)"
     );
   }
-  if (!apiKey) {
-    throw new Error(
-      "DOZERO_API_KEY is not set. Generate one at: https://dozero.dev → Settings → API Keys"
-    );
-  }
 
-  return { convexUrl: convexUrl.replace(/\/$/, ""), apiKey };
+  const token = process.env.DOZERO_AUTH_TOKEN;
+
+  return { convexUrl: convexUrl.replace(/\/$/, ""), token };
 }
 
 function headers(): Record<string, string> {
-  const { apiKey } = getConfig();
-  return {
-    "X-Api-Key": apiKey,
-    "Content-Type": "application/json",
-  };
+  const { token } = getConfig();
+  const h: Record<string, string> = { "Content-Type": "application/json" };
+  if (token) h["Authorization"] = `Bearer ${token}`;
+  return h;
 }
 
 /**
@@ -55,8 +47,8 @@ export async function convexQuery<T = unknown>(
 
   if (response.status === 401) {
     throw new Error(
-      "Authentication failed (401). Your API key may be invalid or revoked. " +
-        "Generate a new one at: https://dozero.dev → Settings → API Keys"
+      "Authentication failed (401). Your session may have expired. " +
+        "Please disconnect and reconnect DoZero in Claude Web to re-authorize."
     );
   }
 
@@ -92,8 +84,8 @@ export async function convexMutation<T = unknown>(
 
   if (response.status === 401) {
     throw new Error(
-      "Authentication failed (401). Your API key may be invalid or revoked. " +
-        "Generate a new one at: https://dozero.dev → Settings → API Keys"
+      "Authentication failed (401). Your session may have expired. " +
+        "Please disconnect and reconnect DoZero in Claude Web to re-authorize."
     );
   }
 

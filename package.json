@@ -8,17 +8,27 @@
     "dozero-mcp-server": "src/index.ts"
   },
   "scripts": {
-    "dev": "tsx src/index.ts",
+    "dev": "tsx --env-file=.env src/index.ts",
     "build": "tsc",
     "start": "node dist/index.js"
   },
-  "keywords": ["mcp", "dozero", "ai-agents", "claude", "convex"],
+  "keywords": [
+    "mcp",
+    "dozero",
+    "ai-agents",
+    "claude",
+    "convex"
+  ],
   "license": "MIT",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.1",
+    "cors": "^2.8.6",
+    "express": "^5.2.1",
     "zod": "^3.23.0"
   },
   "devDependencies": {
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
     "@types/node": "^20.0.0",
     "tsx": "^4.0.0",
     "typescript": "^5.0.0"

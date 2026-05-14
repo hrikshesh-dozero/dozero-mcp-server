@@ -1,8 +1,11 @@
 #!/usr/bin/env node
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
 import { z } from "zod";
+import express from "express";
+import cors from "cors";
+import { handleAuthorize, handleCallback, handleOAuthMetadata } from "./oauth.js";
 import { handleCreateCompany } from "./tools/createCompany.js";
 import { handleListCompanies } from "./tools/listCompanies.js";
 import { handleListAgents } from "./tools/listAgents.js";
@@ -554,14 +557,89 @@ server.tool(
   }
 );
 
-// ── Start the server ────────────────────────────────────────────────────────────
-async function main() {
-  const transport = new StdioServerTransport();
-  await server.connect(transport);
-  console.error("DoZero MCP server running on stdio");
-}
+// ── Express SSE Server ──────────────────────────────────────────────────────────
+const app = express();
+app.use(cors());
+app.use(express.json());
 
-main().catch((error) => {
-  console.error("Fatal error starting DoZero MCP server:", error);
-  process.exit(1);
+// Store active SSE transports keyed by session ID
+const transports = new Map<string, SSEServerTransport>();
+
+// ── OAuth 2.0 Routes ────────────────────────────────────────────────────
+
+// RFC 8414 — OAuth server metadata (Claude Web auto-discovers this)
+app.get("/.well-known/oauth-authorization-server", handleOAuthMetadata);
+
+// Step 1: Claude Web redirects user here to start login
+app.get("/authorize", handleAuthorize);
+
+// Step 2: WorkOS redirects back here after user logs in
+app.get("/callback", handleCallback);
+
+// ── MCP SSE Routes ────────────────────────────────────────────────────────
+
+/**
+ * GET /sse
+ * Claude Web opens this SSE stream. We extract the WorkOS Bearer token
+ * from the Authorization header and store it on the transport so every
+ * tool handler can forward it to Convex as the auth credential.
+ */
+app.get("/sse", async (req, res) => {
+  // Extract Bearer token sent by Claude Web
+  const authHeader = req.headers.authorization ?? "";
+  const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;
+
+  if (!token) {
+    res.status(401).json({
+      error: "unauthorized",
+      error_description: "Missing Bearer token. Please connect via the OAuth flow.",
+    });
+    return;
+  }
+
+  // Inject the token as an env var so convex.ts can pick it up per-request.
+  // In a multi-tenant production setup, use AsyncLocalStorage instead.
+  process.env.DOZERO_AUTH_TOKEN = token;
+
+  console.log("New authenticated Claude Web connection:", req.ip);
+  const transport = new SSEServerTransport("/messages", res);
+  transports.set(transport.sessionId, transport);
+
+  res.on("close", () => {
+    console.log("Connection closed:", transport.sessionId);
+    transports.delete(transport.sessionId);
+  });
+
+  await server.connect(transport);
+});
+
+/**
+ * POST /messages
+ * Claude Web POSTs tool-call requests here.
+ */
+app.post("/messages", async (req, res) => {
+  const sessionId = req.query.sessionId as string;
+  const transport = transports.get(sessionId);
+
+  if (!transport) {
+    res.status(400).json({ error: "No active session found. Please reconnect." });
+    return;
+  }
+
+  await transport.handlePostMessage(req, res);
+});
+
+/**
+ * GET /health
+ * Simple health check for deployment platforms.
+ */
+app.get("/health", (_req, res) => {
+  res.json({ status: "ok", server: "dozero-mcp", tools: 15 });
+});
+
+const PORT = parseInt(process.env.PORT ?? "3000", 10);
+app.listen(PORT, () => {
+  console.log(`DoZero MCP server running at http://localhost:${PORT}`);
+  console.log(`OAuth metadata: http://localhost:${PORT}/.well-known/oauth-authorization-server`);
+  console.log(`Connect Claude Web to: http://localhost:${PORT}/sse`);
 });
