@@ -5,7 +5,7 @@ export async function handleListTasks(args: {
   agentId?: string;
   statusFilter?: string;
 }): Promise<any[]> {
-  const tasks = await convexQuery<any[]>("tasks:listTasks", {
+  const tasks = await convexQuery<any[]>("tasks:listTasksInternal", {
     ...(args.groupId ? { groupId: args.groupId } : {}),
     ...(args.agentId ? { agentId: args.agentId } : {}),
     ...(args.statusFilter ? { statusFilter: args.statusFilter } : {}),

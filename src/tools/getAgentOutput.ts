@@ -3,7 +3,7 @@ import { convexQuery } from "../convex.js";
 export async function handleGetAgentOutput(args: {
   taskId: string;
 }): Promise<any> {
-  const task = await convexQuery<any>("tasks:getTask", {
+  const task = await convexQuery<any>("tasks:getTaskInternal", {
     taskId: args.taskId,
   });
 

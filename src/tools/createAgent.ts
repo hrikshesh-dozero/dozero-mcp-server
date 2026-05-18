@@ -6,7 +6,7 @@ export async function handleCreateAgent(args: {
   systemPrompt: string;
   model?: string;
 }): Promise<{ agentId: string; name: string }> {
-  const agentId = await convexMutation<string>("agents:createAgentWithConfig", {
+  const agentId = await convexMutation<string>("agents:createAgentWithConfigInternal", {
     name: args.name,
     description: args.description,
     systemPrompt: args.systemPrompt,

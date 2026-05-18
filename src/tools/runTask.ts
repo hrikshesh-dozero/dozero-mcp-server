@@ -7,7 +7,7 @@ export async function handleRunTask(args: {
   description?: string;
   priority?: "low" | "medium" | "high" | "critical";
 }): Promise<{ taskId: string }> {
-  const taskId = await convexMutation<string>("tasks:enqueueTask", {
+  const taskId = await convexMutation<string>("tasks:enqueueTaskInternal", {
     groupId: args.groupId,
     agentId: args.agentId,
     title: args.title,

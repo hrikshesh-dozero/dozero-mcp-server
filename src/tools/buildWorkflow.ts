@@ -7,7 +7,7 @@ export async function handleBuildWorkflow(args: {
   task: string;
   cron: string;
 }): Promise<{ scheduleId: string }> {
-  const scheduleId = await convexMutation<string>("agents:createAgentSchedule", {
+  const scheduleId = await convexMutation<string>("agentSchedules:buildWorkflowInternal", {
     agentId: args.agentId,
     label: args.label,
     task: args.task,

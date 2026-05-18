@@ -130,7 +130,9 @@ export async function handleCreateCompany(args: {
     skills: [],
   }));
 
-  const groupId = await convexMutation<string>("agents:buildCompany", {
+  const groupId = await convexMutation<string>("agents:buildCompanyInternal", {
+    idea,
+    numAgents,
     companyName: blueprint.companyName,
     tagline: blueprint.tagline,
     sharedContext: blueprint.sharedContext,

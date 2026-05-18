@@ -3,7 +3,7 @@ import { convexQuery } from "../convex.js";
 export async function handleGetPlan(args: {
   planId: string;
 }): Promise<any> {
-  const plan = await convexQuery<any>("companyPlans:getPlan", {
+  const plan = await convexQuery<any>("companyPlans:getPlanInternal", {
     planId: args.planId,
   });
   

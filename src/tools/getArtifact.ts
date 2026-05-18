@@ -3,7 +3,7 @@ import { convexQuery } from "../convex.js";
 export async function handleGetArtifact(args: {
   artifactId: string;
 }): Promise<any> {
-  const artifact = await convexQuery<any>("artifacts:getArtifact", {
+  const artifact = await convexQuery<any>("artifacts:getArtifactInternal", {
     artifactId: args.artifactId,
   });
   
