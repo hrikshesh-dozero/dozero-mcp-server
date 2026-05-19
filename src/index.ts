@@ -642,15 +642,26 @@ app.get("/sse", async (req, res) => {
  * Claude Web POSTs tool-call requests here.
  */
 app.post("/messages", async (req, res) => {
-  const sessionId = req.query.sessionId as string;
-  const transport = transports.get(sessionId);
+  try {
+    const sessionId = req.query.sessionId as string;
+    const transport = transports.get(sessionId);
 
-  if (!transport) {
-    res.status(400).json({ error: "No active session found. Please reconnect." });
-    return;
+    console.log(`[messages] Query Session ID: "${sessionId}"`);
+    console.log(`[messages] Active Sessions: ${JSON.stringify(Array.from(transports.keys()))}`);
+
+    if (!transport) {
+      console.log(`[messages] Session NOT found for "${sessionId}"`);
+      res.status(400).json({ error: `No active session found for ID: ${sessionId}. Please reconnect.` });
+      return;
+    }
+
+    console.log("[messages] Request body:", JSON.stringify(req.body));
+    await transport.handlePostMessage(req, res);
+    console.log("[messages] handlePostMessage completed");
+  } catch (error) {
+    console.error("[messages] Error in /messages:", error);
+    res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
   }
-
-  await transport.handlePostMessage(req, res);
 });
 
 /**
