@@ -221,7 +221,9 @@ export async function handleToken(req: Request, res: Response) {
  * authorization endpoint automatically (RFC 8414).
  */
 export function handleOAuthMetadata(req: Request, res: Response) {
-  const appUrl = process.env.MCP_APP_URL ?? `${req.protocol}://${req.get("host")}`;
+  const proto = (req.headers["x-forwarded-proto"] as string) || req.protocol;
+  const host = (req.headers["x-forwarded-host"] as string) || req.get("host");
+  const appUrl = `${proto}://${host}`;
   res.json({
     issuer: appUrl,
     authorization_endpoint: `${appUrl}/authorize`,
