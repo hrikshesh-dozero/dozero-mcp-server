@@ -6,6 +6,7 @@ import { z } from "zod";
 import express from "express";
 import cors from "cors";
 import { handleAuthorize, handleCallback, handleOAuthMetadata, handleToken } from "./oauth.js";
+import { authStorage } from "./convex.js";
 import { handleCreateCompany } from "./tools/createCompany.js";
 import { handleListCompanies } from "./tools/listCompanies.js";
 import { handleListAgents } from "./tools/listAgents.js";
@@ -22,10 +23,11 @@ import { handleRunPlan } from "./tools/runPlan.js";
 import { handleListGroupMembers } from "./tools/listGroupMembers.js";
 import { handleListTasks } from "./tools/listTasks.js";
 
-const server = new McpServer({
-  name: "dozero",
-  version: "1.0.0",
-});
+function createMcpServer(): McpServer {
+  const server = new McpServer({
+    name: "dozero",
+    version: "1.0.0",
+  });
 
 // ── Tool 1: create_company ──────────────────────────────────────────────────────
 server.tool(
@@ -557,6 +559,9 @@ server.tool(
   }
 );
 
+  return server;
+}
+
 // ── Express SSE Server ──────────────────────────────────────────────────────────
 const app = express();
 app.use(cors());
@@ -565,6 +570,8 @@ app.use(express.urlencoded({ extended: true }));
 
 // Store active SSE transports keyed by session ID
 const transports = new Map<string, SSEServerTransport>();
+// Store active tokens keyed by session ID
+const sessionTokens = new Map<string, string>();
 
 // ── OAuth 2.0 Routes ────────────────────────────────────────────────────
 
@@ -597,35 +604,27 @@ app.get("/sse", async (req, res) => {
   // Prevent Render/Nginx from buffering the SSE stream
   res.setHeader("X-Accel-Buffering", "no");
 
-  // Extract Bearer token sent by Claude Web
+  // Extract Bearer token sent by Claude Web or via apiKey query parameter
   const authHeader = req.headers.authorization ?? "";
-  const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;
-
-  // Inject the token as an env var so convex.ts can pick it up per-request.
-  // In a multi-tenant production setup, use AsyncLocalStorage instead.
-  // Fall back to the DOZERO_AUTH_TOKEN from .env for local testing if no header is present
-  process.env.DOZERO_AUTH_TOKEN = token || process.env.DOZERO_AUTH_TOKEN || "fake-test-token";
+  const queryToken = req.query.apiKey as string | undefined;
+  const token = (authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null) || queryToken || null;
 
   console.log("New authenticated Claude Web connection:", req.ip);
   const transport = new SSEServerTransport("/messages", res);
   transports.set(transport.sessionId, transport);
+  if (token) {
+    sessionTokens.set(transport.sessionId, token);
+  }
 
   res.on("close", () => {
     console.log("Connection closed:", transport.sessionId);
     transports.delete(transport.sessionId);
+    sessionTokens.delete(transport.sessionId);
   });
 
-  // If the single-tenant server is already connected to another transport, close it first
-  if (server.isConnected()) {
-    console.log("Closing existing MCP server connection to accept new connection");
-    try {
-      await server.close();
-    } catch (err) {
-      console.error("Error closing existing server connection:", err);
-    }
-  }
-
-  await server.connect(transport);
+  // Create a separate server instance for this user session to support multi-tenancy
+  const userServer = createMcpServer();
+  await userServer.connect(transport);
 });
 
 /**
@@ -636,6 +635,7 @@ app.post("/messages", async (req, res) => {
   try {
     const sessionId = req.query.sessionId as string;
     const transport = transports.get(sessionId);
+    const token = sessionTokens.get(sessionId);
 
     console.log(`[messages] Query Session ID: "${sessionId}"`);
     console.log(`[messages] Active Sessions: ${JSON.stringify(Array.from(transports.keys()))}`);
@@ -647,7 +647,12 @@ app.post("/messages", async (req, res) => {
     }
 
     console.log("[messages] Request body:", JSON.stringify(req.body));
-    await transport.handlePostMessage(req, res, req.body);
+    
+    // Execute request processing within the specific user's token context
+    await authStorage.run({ token: token ?? "" }, async () => {
+      await transport.handlePostMessage(req, res, req.body);
+    });
+
     console.log("[messages] handlePostMessage completed");
   } catch (error) {
     console.error("[messages] Error in /messages:", error);

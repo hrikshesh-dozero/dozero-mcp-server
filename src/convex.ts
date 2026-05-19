@@ -6,7 +6,10 @@
  * The token is injected per-session by the SSE handler in index.ts.
  */
 
+import { AsyncLocalStorage } from "node:async_hooks";
 import type { ConvexMutationResponse } from "./types.js";
+
+export const authStorage = new AsyncLocalStorage<{ token: string }>();
 
 function getConfig() {
   const convexUrl = process.env.DOZERO_CONVEX_URL;
@@ -17,7 +20,8 @@ function getConfig() {
     );
   }
 
-  const token = process.env.DOZERO_AUTH_TOKEN;
+  // Retrieve token from AsyncLocalStorage context, fallback to process.env.DOZERO_AUTH_TOKEN
+  const token = authStorage.getStore()?.token || process.env.DOZERO_AUTH_TOKEN;
 
   return { convexUrl: convexUrl.replace(/\/$/, ""), token };
 }
