@@ -563,15 +563,6 @@ app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-app.use((req, res, next) => {
-  const start = Date.now();
-  res.on("finish", () => {
-    const duration = Date.now() - start;
-    console.log(`[HTTP] ${req.method} ${req.url} - Status: ${res.statusCode} - Duration: ${duration}ms - IP: ${req.ip}`);
-  });
-  next();
-});
-
 // Store active SSE transports keyed by session ID
 const transports = new Map<string, SSEServerTransport>();
 
@@ -656,7 +647,7 @@ app.post("/messages", async (req, res) => {
     }
 
     console.log("[messages] Request body:", JSON.stringify(req.body));
-    await transport.handlePostMessage(req, res);
+    await transport.handlePostMessage(req, res, req.body);
     console.log("[messages] handlePostMessage completed");
   } catch (error) {
     console.error("[messages] Error in /messages:", error);
