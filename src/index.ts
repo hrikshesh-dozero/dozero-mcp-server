@@ -589,6 +589,9 @@ app.post("/token", handleToken);
  * tool handler can forward it to Convex as the auth credential.
  */
 app.get(["/", "/sse"], async (req, res) => {
+  // Prevent Render/Nginx from buffering the SSE stream
+  res.setHeader("X-Accel-Buffering", "no");
+
   // Extract Bearer token sent by Claude Web
   const authHeader = req.headers.authorization ?? "";
   const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;
