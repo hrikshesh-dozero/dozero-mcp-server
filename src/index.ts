@@ -588,7 +588,11 @@ app.post("/token", handleToken);
  * from the Authorization header and store it on the transport so every
  * tool handler can forward it to Convex as the auth credential.
  */
-app.get(["/", "/sse"], async (req, res) => {
+app.get("/", (_req, res) => {
+  res.json({ status: "running", message: "DoZero MCP Server is active. Use /sse for the SSE endpoint." });
+});
+
+app.get("/sse", async (req, res) => {
   // Prevent Render/Nginx from buffering the SSE stream
   res.setHeader("X-Accel-Buffering", "no");
 
