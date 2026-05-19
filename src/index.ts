@@ -614,6 +614,16 @@ app.get("/sse", async (req, res) => {
     transports.delete(transport.sessionId);
   });
 
+  // If the single-tenant server is already connected to another transport, close it first
+  if (server.isConnected()) {
+    console.log("Closing existing MCP server connection to accept new connection");
+    try {
+      await server.close();
+    } catch (err) {
+      console.error("Error closing existing server connection:", err);
+    }
+  }
+
   await server.connect(transport);
 });
 
