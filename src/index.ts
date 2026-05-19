@@ -5,7 +5,7 @@ import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
 import { z } from "zod";
 import express from "express";
 import cors from "cors";
-import { handleAuthorize, handleCallback, handleOAuthMetadata } from "./oauth.js";
+import { handleAuthorize, handleCallback, handleOAuthMetadata, handleToken } from "./oauth.js";
 import { handleCreateCompany } from "./tools/createCompany.js";
 import { handleListCompanies } from "./tools/listCompanies.js";
 import { handleListAgents } from "./tools/listAgents.js";
@@ -560,6 +560,8 @@ server.tool(
 // ── Express SSE Server ──────────────────────────────────────────────────────────
 const app = express();
 app.use(cors());
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
 // Store active SSE transports keyed by session ID
 const transports = new Map<string, SSEServerTransport>();
@@ -575,6 +577,9 @@ app.get("/authorize", handleAuthorize);
 // Step 2: WorkOS redirects back here after user logs in
 app.get("/callback", handleCallback);
 
+// Step 3: Claude Web exchanges the auth code for an access token
+app.post("/token", handleToken);
+
 // ── MCP SSE Routes ────────────────────────────────────────────────────────
 
 /**
@@ -583,7 +588,7 @@ app.get("/callback", handleCallback);
  * from the Authorization header and store it on the transport so every
  * tool handler can forward it to Convex as the auth credential.
  */
-app.get("/sse", async (req, res) => {
+app.get(["/", "/sse"], async (req, res) => {
   // Extract Bearer token sent by Claude Web
   const authHeader = req.headers.authorization ?? "";
   const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;

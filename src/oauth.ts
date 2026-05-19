@@ -34,7 +34,10 @@ function getOAuthConfig() {
 
 // Temporary in-memory state store (PKCE + redirect_uri per session).
 // For production, swap with Redis or a database table.
-const pendingStates = new Map<string, { codeVerifier: string; redirectUri: string }>();
+const pendingStates = new Map<string, { codeVerifier: string; redirectUri: string; clientState?: string }>();
+
+// Temporary store for authorization codes
+const authCodes = new Map<string, { access_token: string; token_type: string; expires_in?: number }>();
 
 // ── PKCE Helpers ─────────────────────────────────────────────────────────────
 
@@ -79,7 +82,8 @@ export async function handleAuthorize(req: Request, res: Response) {
   // Store state → code verifier + where to redirect after
   pendingStates.set(state, {
     codeVerifier,
-    redirectUri: clientRedirectUri + (clientState ? `&state=${encodeURIComponent(clientState)}` : ""),
+    redirectUri: clientRedirectUri,
+    clientState,
   });
 
   // Auto-expire after 10 minutes
@@ -156,15 +160,58 @@ export async function handleCallback(req: Request, res: Response) {
     expires_in?: number;
   };
 
-  // Redirect back to Claude Web with the access token
+  // Generate an authorization code for Claude
+  const authCode = crypto.randomBytes(16).toString("hex");
+
+  // Store the access token against the auth code
+  authCodes.set(authCode, {
+    access_token: tokenData.access_token,
+    token_type: tokenData.token_type ?? "Bearer",
+    expires_in: tokenData.expires_in,
+  });
+
+  // Auto-expire auth code after 10 minutes if not used
+  setTimeout(() => authCodes.delete(authCode), 10 * 60 * 1000);
+
+  // Redirect back to Claude Web with the authorization code
   const finalRedirectUrl = new URL(pending.redirectUri);
-  finalRedirectUrl.searchParams.set("access_token", tokenData.access_token);
-  finalRedirectUrl.searchParams.set("token_type", tokenData.token_type ?? "Bearer");
-  if (tokenData.expires_in) {
-    finalRedirectUrl.searchParams.set("expires_in", String(tokenData.expires_in));
+  finalRedirectUrl.searchParams.set("code", authCode);
+  if (pending.clientState) {
+    finalRedirectUrl.searchParams.set("state", pending.clientState);
   }
 
   res.redirect(finalRedirectUrl.toString());
+}
+
+/**
+ * POST /token
+ *
+ * Claude Web posts the authorization code here to exchange it for an access token.
+ */
+export async function handleToken(req: Request, res: Response) {
+  // If urlencoded body parsing isn't configured, we should just read from req.body or handle it.
+  // We will assume express.urlencoded() or express.json() is used in index.ts
+  const code = req.body?.code || req.query.code;
+  
+  if (!code) {
+    res.status(400).json({ error: "invalid_request", error_description: "Missing code parameter" });
+    return;
+  }
+
+  const tokenData = authCodes.get(code);
+  if (!tokenData) {
+    res.status(400).json({ error: "invalid_grant", error_description: "Invalid or expired authorization code" });
+    return;
+  }
+
+  // Codes are one-time use
+  authCodes.delete(code);
+
+  res.json({
+    access_token: tokenData.access_token,
+    token_type: tokenData.token_type,
+    expires_in: tokenData.expires_in,
+  });
 }
 
 /**
