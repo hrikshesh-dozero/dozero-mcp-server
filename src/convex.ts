@@ -122,10 +122,10 @@ export async function convexHttpPost<T = unknown>(
 ): Promise<T> {
   const { convexUrl } = getConfig();
 
-  const response = await fetch(`${convexUrl}/api/mcp/http`, {
+  const response = await fetch(`${convexUrl}${endpoint}`, {
     method: "POST",
     headers: headers(),
-    body: JSON.stringify({ endpoint, body }),
+    body: JSON.stringify(body),
   });
 
   if (response.status === 401) {
@@ -147,7 +147,6 @@ export async function convexHttpPost<T = unknown>(
 
 /**
  * Call a custom DoZero HTTP endpoint (SSE response) via the MCP gateway.
- * Route: POST /api/mcp/http-sse
  *
  * Returns the full SSE text body — caller is responsible for parsing
  * the `event: done` frame.
@@ -158,10 +157,10 @@ export async function convexHttpPostSSE(
 ): Promise<string> {
   const { convexUrl } = getConfig();
 
-  const response = await fetch(`${convexUrl}/api/mcp/http-sse`, {
+  const response = await fetch(`${convexUrl}${endpoint}`, {
     method: "POST",
     headers: headers(),
-    body: JSON.stringify({ endpoint, body }),
+    body: JSON.stringify(body),
   });
 
   if (response.status === 401) {
